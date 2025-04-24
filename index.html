@@ -1,38 +1,265 @@
+
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="css/style.css">
-    <link rel="icon" href="img/flowers.png" type="image/x-icon">
-    <title>FLORES</title>
+    <title>GeoBlast - Geometría + Disparos</title>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background: #000; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        canvas { 
+            display: block; 
+            border: 2px solid #333;
+        }
+        #instructions {
+            position: absolute;
+            top: 10px;
+            color: white;
+            text-align: center;
+            width: 100%;
+        }
+    </style>
 </head>
 <body>
-    <div class="greetings">
+    <div id="instructions">
+        <h1>GeoBlast</h1>
+        <p>Usa las flechas para moverte y ESPACIO para disparar</p>
+    </div>
+    <canvas id="gameCanvas"></canvas>
 
-        <span>H</span>
-        <span>O</span>
-        <span>L</span>
-        <span>A</span>
-        <span>PRESIOSA</span>
-    </div>
-    <div class="greetings">
-        <span></span>
-        <span></span>
-        <span></span>
-        <span></span>
-        <span></span>
-        <span></span>
-    </div>
-    <div class="description">
-        <span>DE MI PA TI BEBE mm!!</span>
-    </div>
-    <div class="button">
-        <button>
-            <a href="FLORES.html">CLICK AKI PA VER TU PAQUETE</a>
-        </button>
-        
-    </div>
+    <script>
+        // Configuración inicial
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 800;
+        canvas.height = 600;
+
+        // Jugador (triángulo)
+        const player = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            size: 20,
+            color: '#00FF00',
+            speed: 5,
+            angle: 0, // Ángulo de rotación (radianes)
+            bullets: [],
+            lastShot: 0,
+            shootDelay: 300 // Milisegundos entre disparos
+        };
+
+        // Enemigos
+        const enemies = [
+            { x: 100, y: 100, radius: 30, color: '#FF0000', type: 'circle', health: 3 },
+            { x: 700, y: 400, width: 40, height: 40, color: '#FFFF00', type: 'square', health: 2 },
+            { x: 300, y: 200, radius: 25, color: '#FF00FF', type: 'circle', health: 2 }
+        ];
+
+        // Controles
+        const keys = {
+            ArrowUp: false,
+            ArrowDown: false,
+            ArrowLeft: false,
+            ArrowRight: false,
+            Space: false
+        };
+
+        // Puntuación
+        let score = 0;
+
+        // Eventos de teclado
+        window.addEventListener('keydown', (e) => {
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+                keys[e.code] = true;
+                e.preventDefault();
+            }
+        });
+        window.addEventListener('keyup', (e) => {
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+                keys[e.code] = false;
+                e.preventDefault();
+            }
+        });
+
+        // Disparar con delay
+        function shoot() {
+            const now = Date.now();
+            if (now - player.lastShot > player.shootDelay) {
+                player.bullets.push({
+                    x: player.x,
+                    y: player.y,
+                    angle: player.angle,
+                    speed: 7,
+                    radius: 5,
+                    color: '#FFFFFF'
+                });
+                player.lastShot = now;
+            }
+        }
+
+        // Actualizar jugador
+        function updatePlayer() {
+            // Movimiento
+            if (keys.ArrowUp) player.y -= player.speed;
+            if (keys.ArrowDown) player.y += player.speed;
+            if (keys.ArrowLeft) player.x -= player.speed;
+            if (keys.ArrowRight) player.x += player.speed;
+            if (keys.Space) shoot();
+
+            // Rotación (apunta al mouse)
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                player.angle = Math.atan2(mouseY - player.y, mouseX - player.x);
+            });
+
+            // Limitar bordes
+            player.x = Math.max(player.size, Math.min(canvas.width - player.size, player.x));
+            player.y = Math.max(player.size, Math.min(canvas.height - player.size, player.y));
+        }
+
+        // Actualizar balas
+        function updateBullets() {
+            for (let i = player.bullets.length - 1; i >= 0; i--) {
+                const bullet = player.bullets[i];
+                bullet.x += Math.cos(bullet.angle) * bullet.speed;
+                bullet.y += Math.sin(bullet.angle) * bullet.speed;
+
+                // Eliminar balas fuera de pantalla
+                if (bullet.x < 0 || bullet.x > canvas.width || bullet.y < 0 || bullet.y > canvas.height) {
+                    player.bullets.splice(i, 1);
+                    continue;
+                }
+
+                // Detectar colisiones con enemigos
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    const enemy = enemies[j];
+                    let collision = false;
+
+                    if (enemy.type === 'circle') {
+                        const dist = Math.hypot(bullet.x - enemy.x, bullet.y - enemy.y);
+                        collision = dist < enemy.radius + bullet.radius;
+                    } else if (enemy.type === 'square') {
+                        collision = (
+                            bullet.x > enemy.x - enemy.width / 2 &&
+                            bullet.x < enemy.x + enemy.width / 2 &&
+                            bullet.y > enemy.y - enemy.height / 2 &&
+                            bullet.y < enemy.y + enemy.height / 2
+                        );
+                    }
+
+                    if (collision) {
+                        player.bullets.splice(i, 1);
+                        enemy.health--;
+                        if (enemy.health <= 0) {
+                            enemies.splice(j, 1);
+                            score += 100;
+                            // Añadir nuevo enemigo aleatorio
+                            if (Math.random() > 0.5) {
+                                enemies.push({
+                                    x: Math.random() * canvas.width,
+                                    y: Math.random() * canvas.height,
+                                    radius: 20 + Math.random() * 20,
+                                    color: `hsl(${Math.random() * 360}, 100%, 50%)`,
+                                    type: 'circle',
+                                    health: 1 + Math.floor(Math.random() * 3)
+                                });
+                            } else {
+                                enemies.push({
+                                    x: Math.random() * canvas.width,
+                                    y: Math.random() * canvas.height,
+                                    width: 30 + Math.random() * 30,
+                                    height: 30 + Math.random() * 30,
+                                    color: `hsl(${Math.random() * 360}, 100%, 50%)`,
+                                    type: 'square',
+                                    health: 1 + Math.floor(Math.random() * 2)
+                                });
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Dibujar jugador (triángulo rotado)
+        function drawPlayer() {
+            ctx.save();
+            ctx.translate(player.x, player.y);
+            ctx.rotate(player.angle);
+            ctx.fillStyle = player.color;
+            ctx.beginPath();
+            ctx.moveTo(player.size, 0);
+            ctx.lineTo(-player.size, -player.size / 2);
+            ctx.lineTo(-player.size, player.size / 2);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // Dibujar enemigos
+        function drawEnemies() {
+            enemies.forEach(enemy => {
+                ctx.fillStyle = enemy.color;
+                if (enemy.type === 'circle') {
+                    ctx.beginPath();
+                    ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (enemy.type === 'square') {
+                    ctx.fillRect(
+                        enemy.x - enemy.width / 2, 
+                        enemy.y - enemy.height / 2, 
+                        enemy.width, 
+                        enemy.height
+                    );
+                }
+            });
+        }
+
+        // Dibujar balas
+        function drawBullets() {
+            player.bullets.forEach(bullet => {
+                ctx.fillStyle = bullet.color;
+                ctx.beginPath();
+                ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        // Dibujar puntuación
+        function drawScore() {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '24px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(`Puntuación: ${score}`, 20, 40);
+        }
+
+        // Bucle principal del juego
+        function gameLoop() {
+            // Limpiar pantalla
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Actualizar y dibujar
+            updatePlayer();
+            updateBullets();
+            drawEnemies();
+            drawPlayer();
+            drawBullets();
+            drawScore();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Iniciar juego
+        gameLoop();
+    </script>
 </body>
 </html>
